@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = '/api';
 const canvas = document.getElementById('radar');
 const ctx = canvas.getContext('2d');
 const notifications = document.getElementById('notifications');

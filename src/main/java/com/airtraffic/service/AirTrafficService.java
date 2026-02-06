@@ -11,7 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AirTrafficService {
     private final Map<String, Aircraft> aircrafts = new ConcurrentHashMap<>();
     private final List<Conflict> activeConflicts = Collections.synchronizedList(new ArrayList<>());
-    private static final double MIN_SEPARATION = 50.0; // Minimum safe distance in pixels
+    // Minimum safe distance in pixels (represents approximately 5 nautical miles at scale)
+    private static final double MIN_SEPARATION = 50.0;
     private static final double DELTA_TIME = 0.1; // Time step for updates
 
     public Aircraft addAircraft(double x, double y) {
@@ -99,8 +100,8 @@ public class AirTrafficService {
         double heading = aircraft.getHeading();
         if (heading >= -45 && heading < 45) return "North";
         if (heading >= 45 && heading < 135) return "East";
-        if (heading >= 135 || heading < -135) return "South";
-        return "West";
+        if (heading >= -135 && heading < -45) return "West";
+        return "South";
     }
 
     public void removeAircraft(String id) {

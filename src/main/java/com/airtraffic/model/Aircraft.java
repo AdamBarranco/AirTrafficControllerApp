@@ -1,6 +1,9 @@
 package com.airtraffic.model;
 
 public class Aircraft {
+    private static final double CANVAS_WIDTH = 800.0;
+    private static final double CANVAS_HEIGHT = 600.0;
+    
     private String id;
     private double x;
     private double y;
@@ -23,11 +26,11 @@ public class Aircraft {
         this.x += this.velocityX * deltaTime;
         this.y += this.velocityY * deltaTime;
         
-        // Wrap around screen boundaries (assuming 800x600 canvas)
-        if (this.x < 0) this.x = 800;
-        if (this.x > 800) this.x = 0;
-        if (this.y < 0) this.y = 600;
-        if (this.y > 600) this.y = 0;
+        // Wrap around screen boundaries
+        if (this.x < 0) this.x = CANVAS_WIDTH;
+        if (this.x > CANVAS_WIDTH) this.x = 0;
+        if (this.y < 0) this.y = CANVAS_HEIGHT;
+        if (this.y > CANVAS_HEIGHT) this.y = 0;
     }
 
     public double distanceTo(Aircraft other) {
