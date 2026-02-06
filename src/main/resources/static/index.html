@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Traffic Controller</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✈️ Air Traffic Controller</h1>
+            <p>Click anywhere on the radar to add aircraft</p>
+        </header>
+        
+        <div class="radar-container">
+            <canvas id="radar" width="800" height="600"></canvas>
+            <div id="notifications" class="notifications"></div>
+        </div>
+        
+        <div class="controls">
+            <button id="clearBtn" class="btn btn-danger">Clear All Aircraft</button>
+            <div class="stats">
+                <span id="aircraftCount">Aircraft: 0</span>
+                <span id="conflictCount">Conflicts: 0</span>
+            </div>
+        </div>
+        
+        <div class="info-panel">
+            <h3>Active Conflicts</h3>
+            <div id="conflictList"></div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
