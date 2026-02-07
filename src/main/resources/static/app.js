@@ -90,7 +90,7 @@ function handleAircraftTap(aircraft) {
 
 function flashScore() {
     scoreEl.classList.remove('flash');
-    void scoreEl.offsetWidth;
+    void scoreEl.offsetWidth; // force reflow to restart CSS animation
     scoreEl.classList.add('flash');
 }
 
