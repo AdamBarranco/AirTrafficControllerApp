@@ -168,3 +168,60 @@ header p {
     .score-bar span { padding: 6px 8px; font-size: 0.82em; }
     .btn { padding: 10px 18px; width: 100%; }
 }
+
+.level {
+    background: rgba(76, 175, 80, 0.25) !important;
+    color: #4CAF50;
+    font-size: 1.1em !important;
+}
+
+.level.flash {
+    animation: levelFlash 0.6s ease-out;
+}
+
+@keyframes levelFlash {
+    0% { transform: scale(1); background: rgba(76, 175, 80, 0.25); }
+    50% { transform: scale(1.2); background: rgba(76, 175, 80, 0.6); }
+    100% { transform: scale(1); background: rgba(76, 175, 80, 0.25); }
+}
+
+.game-over-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.game-over-content {
+    background: linear-gradient(135deg, #2c1e3e 0%, #3a1a1a 100%);
+    padding: 30px 40px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    border: 2px solid #e74c3c;
+}
+
+.game-over-content h2 {
+    font-size: 2em;
+    color: #e74c3c;
+    margin-bottom: 10px;
+}
+
+.game-over-content p {
+    margin-bottom: 10px;
+    opacity: 0.9;
+}
+
+.btn-restart {
+    background: #4CAF50;
+    color: white;
+    margin-top: 10px;
+    font-size: 1.1em;
+    padding: 12px 32px;
+}

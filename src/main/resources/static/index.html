@@ -15,10 +15,11 @@
     <div class="container">
         <header>
             <h1>✈️ Air Traffic Controller</h1>
-            <p>Tap the radar to add aircraft | Tap a plane to flag a collision</p>
+            <p>Tap a plane in conflict to flag it | Auto-spawning planes | Level up every 10 flags</p>
         </header>
 
         <div class="score-bar">
+            <span id="levelDisplay" class="level">Level: 1</span>
             <span id="aircraftCount">Aircraft: 0</span>
             <span id="score" class="score">Score: 0</span>
             <span id="conflictCount">Conflicts: 0</span>
@@ -32,6 +33,15 @@
 
         <div class="controls">
             <button id="clearBtn" class="btn btn-danger">Clear All</button>
+        </div>
+
+        <div id="gameOverOverlay" class="game-over-overlay" style="display:none;">
+            <div class="game-over-content">
+                <h2>Game Over!</h2>
+                <p>Too many collisions (more than 5).</p>
+                <p id="gameOverStats"></p>
+                <button id="restartBtn" class="btn btn-restart">Restart (Level 1)</button>
+            </div>
         </div>
 
         <div class="info-panel">
