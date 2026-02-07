@@ -6,12 +6,22 @@ public class Conflict {
     private double distance;
     private String resolution;
     private boolean resolved;
+    private String severity; // "warning" or "danger"
 
     public Conflict(Aircraft aircraft1, Aircraft aircraft2, double distance) {
         this.aircraft1 = aircraft1;
         this.aircraft2 = aircraft2;
         this.distance = distance;
         this.resolved = false;
+        this.severity = "danger";
+    }
+
+    public Conflict(Aircraft aircraft1, Aircraft aircraft2, double distance, String severity) {
+        this.aircraft1 = aircraft1;
+        this.aircraft2 = aircraft2;
+        this.distance = distance;
+        this.resolved = false;
+        this.severity = severity;
     }
 
     public Aircraft getAircraft1() {
@@ -40,6 +50,14 @@ public class Conflict {
 
     public void setResolved(boolean resolved) {
         this.resolved = resolved;
+    }
+
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
     }
 
     @Override

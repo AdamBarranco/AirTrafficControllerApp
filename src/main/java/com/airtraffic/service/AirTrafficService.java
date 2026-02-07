@@ -13,16 +13,20 @@ public class AirTrafficService {
     private final List<Conflict> activeConflicts = Collections.synchronizedList(new ArrayList<>());
     // Minimum safe distance in pixels (represents approximately 5 nautical miles at scale)
     private static final double MIN_SEPARATION = 50.0;
+    private static final double WARNING_DISTANCE = 100.0;
+    private static final double COLLISION_DISTANCE = 15.0;
+    private static final double MIN_TURN_SPEED = 1.0;
     private static final double DELTA_TIME = 0.1; // Time step for updates
     private static final double CANVAS_WIDTH = 800.0;
     private static final double CANVAS_HEIGHT = 600.0;
 
     private int level = 1;
+    private int lives = 3;
     private int totalCollisionCount = 0;
     private int tappedCollisionCount = 0;
     private boolean gameOver = false;
-    private final Set<String> seenConflictPairs = Collections.synchronizedSet(new HashSet<>());
     private final Set<String> tappedAircraftIds = Collections.synchronizedSet(new HashSet<>());
+    private final List<double[]> recentExplosions = Collections.synchronizedList(new ArrayList<>());
 
     public Aircraft addAircraft(double x, double y) {
         String id = UUID.randomUUID().toString();
@@ -57,6 +61,7 @@ public class AirTrafficService {
     public List<Conflict> detectConflicts() {
         activeConflicts.clear();
         List<Aircraft> aircraftList = new ArrayList<>(aircrafts.values());
+        List<String[]> collisionPairs = new ArrayList<>();
         
         for (int i = 0; i < aircraftList.size(); i++) {
             for (int j = i + 1; j < aircraftList.size(); j++) {
@@ -64,22 +69,31 @@ public class AirTrafficService {
                 Aircraft a2 = aircraftList.get(j);
                 double distance = a1.distanceTo(a2);
                 
-                if (distance < MIN_SEPARATION) {
-                    Conflict conflict = new Conflict(a1, a2, distance);
-                    activeConflicts.add(conflict);
-
-                    // Track unique collision pairs for counting
-                    String pairKey = a1.getId().compareTo(a2.getId()) < 0
-                            ? a1.getId() + ":" + a2.getId()
-                            : a2.getId() + ":" + a1.getId();
-                    if (seenConflictPairs.add(pairKey)) {
-                        totalCollisionCount++;
-                        if (totalCollisionCount > 5) {
-                            gameOver = true;
-                        }
+                if (distance < COLLISION_DISTANCE) {
+                    // Actual collision - planes blow up
+                    double midX = (a1.getX() + a2.getX()) / 2;
+                    double midY = (a1.getY() + a2.getY()) / 2;
+                    recentExplosions.add(new double[]{midX, midY});
+                    collisionPairs.add(new String[]{a1.getId(), a2.getId()});
+                    totalCollisionCount++;
+                    lives--;
+                    if (lives <= 0) {
+                        gameOver = true;
                     }
+                } else if (distance < MIN_SEPARATION) {
+                    Conflict conflict = new Conflict(a1, a2, distance, "danger");
+                    activeConflicts.add(conflict);
+                } else if (distance < WARNING_DISTANCE) {
+                    Conflict conflict = new Conflict(a1, a2, distance, "warning");
+                    activeConflicts.add(conflict);
                 }
             }
+        }
+        
+        // Remove collided aircraft after iteration
+        for (String[] pair : collisionPairs) {
+            aircrafts.remove(pair[0]);
+            aircrafts.remove(pair[1]);
         }
         
         return activeConflicts;
@@ -93,18 +107,44 @@ public class AirTrafficService {
         if (tappedAircraftIds.contains(aircraftId)) {
             return false;
         }
-        boolean inConflict = activeConflicts.stream().anyMatch(c ->
+        Conflict matchedConflict = activeConflicts.stream().filter(c ->
                 !c.isResolved() && (c.getAircraft1().getId().equals(aircraftId)
-                        || c.getAircraft2().getId().equals(aircraftId)));
-        if (inConflict) {
+                        || c.getAircraft2().getId().equals(aircraftId)))
+                .findFirst().orElse(null);
+        if (matchedConflict != null) {
             tappedAircraftIds.add(aircraftId);
             tappedCollisionCount++;
+
+            // Turn the tapped aircraft away from the other
+            Aircraft tapped = matchedConflict.getAircraft1().getId().equals(aircraftId)
+                    ? matchedConflict.getAircraft1() : matchedConflict.getAircraft2();
+            Aircraft other = matchedConflict.getAircraft1().getId().equals(aircraftId)
+                    ? matchedConflict.getAircraft2() : matchedConflict.getAircraft1();
+            turnAway(tapped, other);
+
             if (tappedCollisionCount > 0 && tappedCollisionCount % 10 == 0) {
                 level++;
             }
             return true;
         }
         return false;
+    }
+
+    private void turnAway(Aircraft tapped, Aircraft other) {
+        double dx = other.getX() - tapped.getX();
+        double dy = other.getY() - tapped.getY();
+        double distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 0) {
+            dx /= distance;
+            dy /= distance;
+            // Turn tapped aircraft away from the other, preserving its speed
+            double speed = Math.sqrt(tapped.getVelocityX() * tapped.getVelocityX()
+                    + tapped.getVelocityY() * tapped.getVelocityY());
+            // Ensure a minimum speed so stationary aircraft still move away
+            if (speed < MIN_TURN_SPEED) speed = MIN_TURN_SPEED;
+            tapped.setVelocityX(-dx * speed);
+            tapped.setVelocityY(-dy * speed);
+        }
     }
 
     public void resolveConflict(Conflict conflict) {
@@ -162,6 +202,10 @@ public class AirTrafficService {
         return level;
     }
 
+    public int getLives() {
+        return lives;
+    }
+
     public int getTotalCollisionCount() {
         return totalCollisionCount;
     }
@@ -177,20 +221,36 @@ public class AirTrafficService {
     public Map<String, Object> getGameState() {
         Map<String, Object> state = new LinkedHashMap<>();
         state.put("level", level);
+        state.put("lives", lives);
         state.put("totalCollisions", totalCollisionCount);
         state.put("tappedCollisions", tappedCollisionCount);
         state.put("gameOver", gameOver);
         state.put("targetAircraftCount", getTargetAircraftCount());
         state.put("speedMultiplier", getSpeedMultiplier());
+        // Include recent explosions and clear them
+        List<double[]> explosions;
+        synchronized (recentExplosions) {
+            explosions = new ArrayList<>(recentExplosions);
+            recentExplosions.clear();
+        }
+        List<Map<String, Double>> explosionList = new ArrayList<>();
+        for (double[] pos : explosions) {
+            Map<String, Double> exp = new LinkedHashMap<>();
+            exp.put("x", pos[0]);
+            exp.put("y", pos[1]);
+            explosionList.add(exp);
+        }
+        state.put("explosions", explosionList);
         return state;
     }
 
     public void resetGame() {
         aircrafts.clear();
         activeConflicts.clear();
-        seenConflictPairs.clear();
         tappedAircraftIds.clear();
+        recentExplosions.clear();
         level = 1;
+        lives = 3;
         totalCollisionCount = 0;
         tappedCollisionCount = 0;
         gameOver = false;

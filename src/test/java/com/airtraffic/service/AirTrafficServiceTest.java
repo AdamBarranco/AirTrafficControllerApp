@@ -50,9 +50,9 @@ class AirTrafficServiceTest {
 
     @Test
     void testDetectConflicts() {
-        // Add aircraft close together (within 50 pixels)
+        // Add aircraft close together (within 50 pixels but not colliding)
         service.addAircraft(100, 100);
-        service.addAircraft(110, 110);
+        service.addAircraft(130, 130);
         
         List<Conflict> conflicts = service.detectConflicts();
         assertEquals(1, conflicts.size());
@@ -60,12 +60,24 @@ class AirTrafficServiceTest {
         Conflict conflict = conflicts.get(0);
         assertNotNull(conflict);
         assertTrue(conflict.getDistance() < 50);
+        assertEquals("danger", conflict.getSeverity());
+    }
+
+    @Test
+    void testDetectWarningConflicts() {
+        // Add aircraft in warning zone (50-100 pixels apart)
+        service.addAircraft(100, 100);
+        service.addAircraft(170, 100);
+        
+        List<Conflict> conflicts = service.detectConflicts();
+        assertEquals(1, conflicts.size());
+        assertEquals("warning", conflicts.get(0).getSeverity());
     }
 
     @Test
     void testResolveConflict() {
         Aircraft a1 = service.addAircraft(100, 100);
-        Aircraft a2 = service.addAircraft(110, 110);
+        Aircraft a2 = service.addAircraft(130, 130);
         
         List<Conflict> conflicts = service.detectConflicts();
         assertEquals(1, conflicts.size());
@@ -122,6 +134,7 @@ class AirTrafficServiceTest {
     @Test
     void testInitialLevel() {
         assertEquals(1, service.getLevel());
+        assertEquals(3, service.getLives());
         assertFalse(service.isGameOver());
         assertEquals(0, service.getTotalCollisionCount());
         assertEquals(0, service.getTappedCollisionCount());
@@ -151,12 +164,16 @@ class AirTrafficServiceTest {
     @Test
     void testRecordTapOnConflictAircraft() {
         Aircraft a1 = service.addAircraft(100, 100);
-        Aircraft a2 = service.addAircraft(110, 110);
+        Aircraft a2 = service.addAircraft(130, 130);
         service.detectConflicts();
 
+        double initialVx = a1.getVelocityX();
+        double initialVy = a1.getVelocityY();
         boolean result = service.recordTap(a1.getId());
         assertTrue(result);
         assertEquals(1, service.getTappedCollisionCount());
+        // Tapping should also turn the aircraft away
+        assertTrue(a1.getVelocityX() != initialVx || a1.getVelocityY() != initialVy);
     }
 
     @Test
@@ -171,25 +188,39 @@ class AirTrafficServiceTest {
     }
 
     @Test
-    void testGameOverTriggersWhenCollisionCountExceedsFive() {
-        // Create 6 unique collision pairs to trigger game over (>5)
-        for (int i = 0; i < 6; i++) {
-            service.addAircraft(100, 100 + i);
-            service.addAircraft(105, 100 + i);
+    void testGameOverTriggersWhenLivesRunOut() {
+        // Create 3 collision pairs (distance < 15) to use up all 3 lives
+        for (int i = 0; i < 3; i++) {
+            service.addAircraft(100 + i * 200, 100);
+            service.addAircraft(100 + i * 200, 101);
         }
         service.detectConflicts();
-        assertTrue(service.getTotalCollisionCount() >= 6);
+        assertEquals(0, service.getLives());
         assertTrue(service.isGameOver());
+    }
+
+    @Test
+    void testCollisionRemovesAircraft() {
+        // Two aircraft that are colliding (distance < 15)
+        service.addAircraft(100, 100);
+        service.addAircraft(100, 101);
+        assertEquals(2, service.getAllAircrafts().size());
+        
+        service.detectConflicts();
+        // Both aircraft should be removed after collision
+        assertEquals(0, service.getAllAircrafts().size());
+        assertEquals(2, service.getLives()); // Lost 1 life
     }
 
     @Test
     void testResetGame() {
         service.addAircraft(100, 100);
-        service.addAircraft(110, 110);
+        service.addAircraft(100, 101);
         service.detectConflicts();
 
         service.resetGame();
         assertEquals(1, service.getLevel());
+        assertEquals(3, service.getLives());
         assertEquals(0, service.getTotalCollisionCount());
         assertEquals(0, service.getTappedCollisionCount());
         assertFalse(service.isGameOver());
@@ -200,10 +231,12 @@ class AirTrafficServiceTest {
     void testGameState() {
         Map<String, Object> state = service.getGameState();
         assertEquals(1, state.get("level"));
+        assertEquals(3, state.get("lives"));
         assertEquals(0, state.get("totalCollisions"));
         assertEquals(0, state.get("tappedCollisions"));
         assertEquals(false, state.get("gameOver"));
         assertEquals(3, state.get("targetAircraftCount"));
         assertEquals(1.0, state.get("speedMultiplier"));
+        assertNotNull(state.get("explosions"));
     }
 }
