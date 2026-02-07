@@ -1,37 +1,98 @@
 const API_BASE = '/api';
 const canvas = document.getElementById('radar');
 const ctx = canvas.getContext('2d');
-const notifications = document.getElementById('notifications');
 const conflictList = document.getElementById('conflictList');
 const aircraftCountEl = document.getElementById('aircraftCount');
 const conflictCountEl = document.getElementById('conflictCount');
+const scoreEl = document.getElementById('score');
 const clearBtn = document.getElementById('clearBtn');
 
 let aircrafts = [];
 let conflicts = [];
-let lastConflictIds = new Set();
+let score = 0;
+let flaggedAircraftIds = new Set();
 
-// Add aircraft on canvas click
-canvas.addEventListener('click', async (e) => {
+const AIRCRAFT_HIT_RADIUS = 22;
+
+// Convert canvas coordinates from event
+function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+// Find aircraft near a point
+function findAircraftAt(px, py) {
+    for (const ac of aircrafts) {
+        const dx = ac.x - px;
+        const dy = ac.y - py;
+        if (Math.sqrt(dx * dx + dy * dy) < AIRCRAFT_HIT_RADIUS) {
+            return ac;
+        }
+    }
+    return null;
+}
+
+// Handle tap / click on canvas
+function handleCanvasInput(e) {
+    e.preventDefault();
+    const { x, y } = getCanvasCoords(e);
+    const tapped = findAircraftAt(x, y);
+
+    if (tapped) {
+        handleAircraftTap(tapped);
+    } else {
+        addAircraft(x, y);
+    }
+}
+
+canvas.addEventListener('click', handleCanvasInput);
+canvas.addEventListener('touchstart', handleCanvasInput, { passive: false });
+
+// Add aircraft via API
+async function addAircraft(x, y) {
     try {
-        const response = await fetch(`${API_BASE}/aircraft`, {
+        await fetch(`${API_BASE}/aircraft`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ x, y })
         });
-        
-        if (response.ok) {
-            showNotification('Aircraft added successfully', 'success');
-        }
     } catch (error) {
         console.error('Error adding aircraft:', error);
-        showNotification('Failed to add aircraft', 'error');
     }
-});
+}
+
+// Handle tapping an aircraft to flag a collision
+function handleAircraftTap(aircraft) {
+    if (flaggedAircraftIds.has(aircraft.id)) return;
+
+    const inConflict = conflicts.some(c =>
+        !c.resolved && (c.aircraft1.id === aircraft.id || c.aircraft2.id === aircraft.id)
+    );
+
+    if (inConflict) {
+        score += 10;
+        flaggedAircraftIds.add(aircraft.id);
+        flashScore();
+    } else {
+        score = Math.max(0, score - 5);
+        flashScore();
+    }
+
+    scoreEl.textContent = `Score: ${score}`;
+}
+
+function flashScore() {
+    scoreEl.classList.remove('flash');
+    void scoreEl.offsetWidth; // force reflow to restart CSS animation
+    scoreEl.classList.add('flash');
+}
 
 // Clear all aircraft
 clearBtn.addEventListener('click', async () => {
@@ -39,7 +100,7 @@ clearBtn.addEventListener('click', async () => {
         await fetch(`${API_BASE}/aircraft`, { method: 'DELETE' });
         aircrafts = [];
         conflicts = [];
-        showNotification('All aircraft cleared', 'success');
+        flaggedAircraftIds.clear();
     } catch (error) {
         console.error('Error clearing aircraft:', error);
     }
@@ -62,33 +123,19 @@ async function updateConflicts() {
         const response = await fetch(`${API_BASE}/conflicts`);
         conflicts = await response.json();
         conflictCountEl.textContent = `Conflicts: ${conflicts.length}`;
-        
-        // Check for new conflicts
-        const currentConflictIds = new Set(
-            conflicts.map(c => `${c.aircraft1.id}-${c.aircraft2.id}`)
-        );
-        
-        conflicts.forEach(conflict => {
-            const id = `${conflict.aircraft1.id}-${conflict.aircraft2.id}`;
-            
-            // New conflict detected
-            if (!lastConflictIds.has(id) && !conflict.resolved) {
-                showNotification(
-                    `⚠️ Conflict detected! ${conflict.aircraft1.callSign} and ${conflict.aircraft2.callSign} are too close!`,
-                    'warning'
-                );
-            }
-            
-            // Conflict resolved
-            if (conflict.resolved && lastConflictIds.has(id)) {
-                showNotification(
-                    `✅ ${conflict.resolution}`,
-                    'success'
-                );
+
+        // Clear flags for resolved conflicts
+        const activeIds = new Set();
+        conflicts.forEach(c => {
+            if (!c.resolved) {
+                activeIds.add(c.aircraft1.id);
+                activeIds.add(c.aircraft2.id);
             }
         });
-        
-        lastConflictIds = currentConflictIds;
+        for (const id of flaggedAircraftIds) {
+            if (!activeIds.has(id)) flaggedAircraftIds.delete(id);
+        }
+
         updateConflictList();
     } catch (error) {
         console.error('Error fetching conflicts:', error);
@@ -101,7 +148,7 @@ function updateConflictList() {
         conflictList.innerHTML = '<div class="no-conflicts">No conflicts detected</div>';
         return;
     }
-    
+
     conflictList.innerHTML = conflicts.map(conflict => `
         <div class="conflict-item ${conflict.resolved ? 'resolved' : ''}">
             <strong>${conflict.aircraft1.callSign} ↔ ${conflict.aircraft2.callSign}</strong><br>
@@ -111,12 +158,85 @@ function updateConflictList() {
     `).join('');
 }
 
+// Draw a realistic airplane shape
+function drawAirplane(x, y, heading, color, isFlagged) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((heading + 90) * Math.PI / 180);
+
+    // Glow for flagged aircraft
+    if (isFlagged) {
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 12;
+    }
+
+    // Fuselage
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.quadraticCurveTo(2, -6, 2, 8);
+    ctx.lineTo(0, 12);
+    ctx.lineTo(-2, 8);
+    ctx.quadraticCurveTo(-2, -6, 0, -14);
+    ctx.closePath();
+    ctx.fill();
+
+    // Main wings
+    ctx.beginPath();
+    ctx.moveTo(-1, -2);
+    ctx.lineTo(-14, 4);
+    ctx.lineTo(-13, 6);
+    ctx.lineTo(-1, 2);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(1, -2);
+    ctx.lineTo(14, 4);
+    ctx.lineTo(13, 6);
+    ctx.lineTo(1, 2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tail wings
+    ctx.beginPath();
+    ctx.moveTo(-1, 8);
+    ctx.lineTo(-6, 12);
+    ctx.lineTo(-5, 13);
+    ctx.lineTo(-1, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(1, 8);
+    ctx.lineTo(6, 12);
+    ctx.lineTo(5, 13);
+    ctx.lineTo(1, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.quadraticCurveTo(2, -6, 2, 8);
+    ctx.lineTo(0, 12);
+    ctx.lineTo(-2, 8);
+    ctx.quadraticCurveTo(-2, -6, 0, -14);
+    ctx.stroke();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
 // Draw aircraft on canvas
 function drawAircrafts() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
+
     // Draw grid
-    ctx.strokeStyle = 'rgba(74, 144, 226, 0.2)';
+    ctx.strokeStyle = 'rgba(74, 144, 226, 0.15)';
     ctx.lineWidth = 1;
     for (let i = 0; i < canvas.width; i += 50) {
         ctx.beginPath();
@@ -130,9 +250,9 @@ function drawAircrafts() {
         ctx.lineTo(canvas.width, i);
         ctx.stroke();
     }
-    
-    // Draw conflict zones (red circles)
-    ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+
+    // Draw conflict zones
+    ctx.strokeStyle = 'rgba(255, 0, 0, 0.25)';
     ctx.lineWidth = 2;
     conflicts.forEach(conflict => {
         if (!conflict.resolved) {
@@ -141,43 +261,24 @@ function drawAircrafts() {
             ctx.stroke();
         }
     });
-    
+
     // Draw aircraft
     aircrafts.forEach(aircraft => {
-        // Check if aircraft is in conflict
-        const inConflict = conflicts.some(c => 
+        const inConflict = conflicts.some(c =>
             !c.resolved && (c.aircraft1.id === aircraft.id || c.aircraft2.id === aircraft.id)
         );
-        
-        // Draw aircraft icon
-        ctx.save();
-        ctx.translate(aircraft.x, aircraft.y);
-        ctx.rotate((aircraft.heading + 90) * Math.PI / 180);
-        
-        // Aircraft body
-        ctx.fillStyle = inConflict ? '#ff4444' : '#4CAF50';
-        ctx.beginPath();
-        ctx.moveTo(0, -10);
-        ctx.lineTo(-5, 5);
-        ctx.lineTo(0, 2);
-        ctx.lineTo(5, 5);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Aircraft outline
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        
-        ctx.restore();
-        
-        // Draw call sign
-        ctx.fillStyle = inConflict ? '#ff4444' : '#fff';
-        ctx.font = '10px monospace';
-        ctx.fillText(aircraft.callSign, aircraft.x + 12, aircraft.y - 5);
-        
-        // Draw velocity vector
-        ctx.strokeStyle = inConflict ? 'rgba(255, 68, 68, 0.5)' : 'rgba(76, 175, 80, 0.5)';
+        const isFlagged = flaggedAircraftIds.has(aircraft.id);
+
+        const color = isFlagged ? '#ffd700' : inConflict ? '#ff4444' : '#4CAF50';
+        drawAirplane(aircraft.x, aircraft.y, aircraft.heading, color, isFlagged);
+
+        // Call sign
+        ctx.fillStyle = inConflict ? '#ff4444' : '#ccc';
+        ctx.font = '10px -apple-system, sans-serif';
+        ctx.fillText(aircraft.callSign, aircraft.x + 16, aircraft.y - 6);
+
+        // Velocity vector
+        ctx.strokeStyle = inConflict ? 'rgba(255, 68, 68, 0.4)' : 'rgba(76, 175, 80, 0.4)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(aircraft.x, aircraft.y);
@@ -189,19 +290,6 @@ function drawAircrafts() {
     });
 }
 
-// Show notification
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    notifications.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideIn 0.3s ease-out reverse';
-        setTimeout(() => notification.remove(), 300);
-    }, 4000);
-}
-
 // Main update loop
 function update() {
     updateAircrafts();
@@ -209,9 +297,5 @@ function update() {
     drawAircrafts();
 }
 
-// Start the update loop
 setInterval(update, 100);
 update();
-
-// Initial message
-showNotification('Click on the radar to add aircraft', 'success');
