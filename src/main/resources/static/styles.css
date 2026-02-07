@@ -175,6 +175,12 @@ header p {
     font-size: 1.1em !important;
 }
 
+.lives {
+    background: rgba(231, 76, 60, 0.25) !important;
+    color: #e74c3c;
+    font-size: 1.1em !important;
+}
+
 .level.flash {
     animation: levelFlash 0.6s ease-out;
 }

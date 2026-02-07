@@ -85,13 +85,5 @@ public class AirTrafficController {
         }
 
         airTrafficService.updatePositions();
-        
-        // Auto-resolve conflicts
-        List<Conflict> conflicts = airTrafficService.getActiveConflicts();
-        for (Conflict conflict : conflicts) {
-            if (!conflict.isResolved()) {
-                airTrafficService.resolveConflict(conflict);
-            }
-        }
     }
 }

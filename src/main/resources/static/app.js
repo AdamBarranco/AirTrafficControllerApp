@@ -6,6 +6,7 @@ const aircraftCountEl = document.getElementById('aircraftCount');
 const conflictCountEl = document.getElementById('conflictCount');
 const scoreEl = document.getElementById('score');
 const levelEl = document.getElementById('levelDisplay');
+const livesEl = document.getElementById('livesDisplay');
 const clearBtn = document.getElementById('clearBtn');
 const gameOverOverlay = document.getElementById('gameOverOverlay');
 const gameOverStats = document.getElementById('gameOverStats');
@@ -15,8 +16,10 @@ let aircrafts = [];
 let conflicts = [];
 let score = 0;
 let currentLevel = 1;
+let currentLives = 3;
 let isGameOver = false;
 let flaggedAircraftIds = new Set();
+let explosions = []; // {x, y, frame} for rendering
 
 const AIRCRAFT_HIT_RADIUS = 22;
 
@@ -139,6 +142,18 @@ async function updateGameState() {
             flashLevel();
         }
 
+        if (state.lives !== currentLives) {
+            currentLives = state.lives;
+            livesEl.textContent = `❤️ ${currentLives}`;
+        }
+
+        // Handle explosions from server
+        if (state.explosions && state.explosions.length > 0) {
+            for (const exp of state.explosions) {
+                explosions.push({ x: exp.x, y: exp.y, frame: 0 });
+            }
+        }
+
         if (state.gameOver && !isGameOver) {
             isGameOver = true;
             gameOverStats.textContent = `You reached Level ${currentLevel} with a score of ${score}.`;
@@ -156,11 +171,14 @@ restartBtn.addEventListener('click', async () => {
         isGameOver = false;
         score = 0;
         currentLevel = 1;
+        currentLives = 3;
         aircrafts = [];
         conflicts = [];
+        explosions = [];
         flaggedAircraftIds.clear();
         scoreEl.textContent = 'Score: 0';
         levelEl.textContent = 'Level: 1';
+        livesEl.textContent = '❤️ 3';
         gameOverOverlay.style.display = 'none';
     } catch (error) {
         console.error('Error resetting game:', error);
@@ -173,6 +191,7 @@ clearBtn.addEventListener('click', async () => {
         await fetch(`${API_BASE}/aircraft`, { method: 'DELETE' });
         aircrafts = [];
         conflicts = [];
+        explosions = [];
         flaggedAircraftIds.clear();
     } catch (error) {
         console.error('Error clearing aircraft:', error);
@@ -325,10 +344,12 @@ function drawAircrafts() {
     }
 
     // Draw conflict zones
-    ctx.strokeStyle = 'rgba(255, 0, 0, 0.25)';
-    ctx.lineWidth = 2;
     conflicts.forEach(conflict => {
         if (!conflict.resolved) {
+            const zoneColor = conflict.severity === 'danger'
+                ? 'rgba(255, 0, 0, 0.25)' : 'rgba(255, 152, 0, 0.2)';
+            ctx.strokeStyle = zoneColor;
+            ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(conflict.aircraft1.x, conflict.aircraft1.y, 50, 0, 2 * Math.PI);
             ctx.stroke();
@@ -337,21 +358,40 @@ function drawAircrafts() {
 
     // Draw aircraft
     aircrafts.forEach(aircraft => {
-        const inConflict = conflicts.some(c =>
-            !c.resolved && (c.aircraft1.id === aircraft.id || c.aircraft2.id === aircraft.id)
-        );
+        // Check if in danger or warning conflict
+        let severity = null;
+        for (const c of conflicts) {
+            if (!c.resolved && (c.aircraft1.id === aircraft.id || c.aircraft2.id === aircraft.id)) {
+                if (c.severity === 'danger') { severity = 'danger'; break; }
+                if (c.severity === 'warning' && severity !== 'danger') severity = 'warning';
+            }
+        }
         const isFlagged = flaggedAircraftIds.has(aircraft.id);
 
-        const color = isFlagged ? '#ffd700' : inConflict ? '#ff4444' : '#4CAF50';
+        let color;
+        if (isFlagged) {
+            color = '#ffd700';
+        } else if (severity === 'danger') {
+            color = '#ff4444';
+        } else if (severity === 'warning') {
+            color = '#ff9800';
+        } else {
+            color = '#4CAF50';
+        }
         drawAirplane(aircraft.x, aircraft.y, aircraft.heading, color, isFlagged);
 
         // Call sign
-        ctx.fillStyle = inConflict ? '#ff4444' : '#ccc';
+        const labelColor = severity === 'danger' ? '#ff4444'
+            : severity === 'warning' ? '#ff9800' : '#ccc';
+        ctx.fillStyle = labelColor;
         ctx.font = '10px -apple-system, sans-serif';
         ctx.fillText(aircraft.callSign, aircraft.x + 16, aircraft.y - 6);
 
         // Velocity vector
-        ctx.strokeStyle = inConflict ? 'rgba(255, 68, 68, 0.4)' : 'rgba(76, 175, 80, 0.4)';
+        const vecColor = severity === 'danger' ? 'rgba(255, 68, 68, 0.4)'
+            : severity === 'warning' ? 'rgba(255, 152, 0, 0.4)'
+            : 'rgba(76, 175, 80, 0.4)';
+        ctx.strokeStyle = vecColor;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(aircraft.x, aircraft.y);
@@ -361,6 +401,33 @@ function drawAircrafts() {
         );
         ctx.stroke();
     });
+
+    // Draw explosions
+    const activeExplosions = [];
+    for (const exp of explosions) {
+        exp.frame++;
+        const maxFrames = 15;
+        if (exp.frame <= maxFrames) {
+            const progress = exp.frame / maxFrames;
+            const radius = 10 + progress * 40;
+            const alpha = 1 - progress;
+
+            // Outer explosion
+            ctx.beginPath();
+            ctx.arc(exp.x, exp.y, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.6})`;
+            ctx.fill();
+
+            // Inner core
+            ctx.beginPath();
+            ctx.arc(exp.x, exp.y, radius * 0.5, 0, 2 * Math.PI);
+            ctx.fillStyle = `rgba(255, 255, 0, ${alpha * 0.8})`;
+            ctx.fill();
+
+            activeExplosions.push(exp);
+        }
+    }
+    explosions = activeExplosions;
 }
 
 // Main update loop
