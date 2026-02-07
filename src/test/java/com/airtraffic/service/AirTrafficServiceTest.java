@@ -171,7 +171,7 @@ class AirTrafficServiceTest {
     }
 
     @Test
-    void testCollisionCountTriggersGameOver() {
+    void testGameOverTriggersWhenCollisionCountExceedsFive() {
         // Create 6 unique collision pairs to trigger game over (>5)
         for (int i = 0; i < 6; i++) {
             service.addAircraft(100, 100 + i);
