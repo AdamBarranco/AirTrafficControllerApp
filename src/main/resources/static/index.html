@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ATC">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1e3c72">
     <title>Air Traffic Controller</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -10,30 +15,31 @@
     <div class="container">
         <header>
             <h1>✈️ Air Traffic Controller</h1>
-            <p>Click anywhere on the radar to add aircraft</p>
+            <p>Tap the radar to add aircraft · Tap a plane to flag a collision</p>
         </header>
-        
+
+        <div class="score-bar">
+            <span id="aircraftCount">Aircraft: 0</span>
+            <span id="score" class="score">Score: 0</span>
+            <span id="conflictCount">Conflicts: 0</span>
+        </div>
+
         <div class="main-display">
             <div class="radar-container">
                 <canvas id="radar" width="800" height="600"></canvas>
             </div>
-            <div id="notifications" class="notifications"></div>
         </div>
-        
+
         <div class="controls">
-            <button id="clearBtn" class="btn btn-danger">Clear All Aircraft</button>
-            <div class="stats">
-                <span id="aircraftCount">Aircraft: 0</span>
-                <span id="conflictCount">Conflicts: 0</span>
-            </div>
+            <button id="clearBtn" class="btn btn-danger">Clear All</button>
         </div>
-        
+
         <div class="info-panel">
             <h3>Active Conflicts</h3>
             <div id="conflictList"></div>
         </div>
     </div>
-    
+
     <script src="app.js"></script>
 </body>
 </html>
