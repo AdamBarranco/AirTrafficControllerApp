@@ -22,6 +22,7 @@ let flaggedAircraftIds = new Set();
 let explosions = []; // {x, y, frame} for rendering
 
 const AIRCRAFT_HIT_RADIUS = 22;
+const EXPLOSION_MAX_FRAMES = 15;
 
 // Convert canvas coordinates from event
 function getCanvasCoords(e) {
@@ -406,7 +407,7 @@ function drawAircrafts() {
     const activeExplosions = [];
     for (const exp of explosions) {
         exp.frame++;
-        const maxFrames = 15;
+        const maxFrames = EXPLOSION_MAX_FRAMES;
         if (exp.frame <= maxFrames) {
             const progress = exp.frame / maxFrames;
             const radius = 10 + progress * 40;

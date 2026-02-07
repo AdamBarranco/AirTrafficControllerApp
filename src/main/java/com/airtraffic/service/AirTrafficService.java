@@ -15,6 +15,7 @@ public class AirTrafficService {
     private static final double MIN_SEPARATION = 50.0;
     private static final double WARNING_DISTANCE = 100.0;
     private static final double COLLISION_DISTANCE = 15.0;
+    private static final double MIN_TURN_SPEED = 1.0;
     private static final double DELTA_TIME = 0.1; // Time step for updates
     private static final double CANVAS_WIDTH = 800.0;
     private static final double CANVAS_HEIGHT = 600.0;
@@ -136,10 +137,11 @@ public class AirTrafficService {
         if (distance > 0) {
             dx /= distance;
             dy /= distance;
-            // Turn tapped aircraft away from the other
+            // Turn tapped aircraft away from the other, preserving its speed
             double speed = Math.sqrt(tapped.getVelocityX() * tapped.getVelocityX()
                     + tapped.getVelocityY() * tapped.getVelocityY());
-            if (speed < 0.5) speed = 1.0;
+            // Ensure a minimum speed so stationary aircraft still move away
+            if (speed < MIN_TURN_SPEED) speed = MIN_TURN_SPEED;
             tapped.setVelocityX(-dx * speed);
             tapped.setVelocityY(-dy * speed);
         }
