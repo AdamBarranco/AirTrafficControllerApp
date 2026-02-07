@@ -14,16 +14,33 @@ public class AirTrafficService {
     // Minimum safe distance in pixels (represents approximately 5 nautical miles at scale)
     private static final double MIN_SEPARATION = 50.0;
     private static final double DELTA_TIME = 0.1; // Time step for updates
+    private static final double CANVAS_WIDTH = 800.0;
+    private static final double CANVAS_HEIGHT = 600.0;
+
+    private int level = 1;
+    private int totalCollisionCount = 0;
+    private int tappedCollisionCount = 0;
+    private boolean gameOver = false;
+    private final Set<String> seenConflictPairs = Collections.synchronizedSet(new HashSet<>());
+    private final Set<String> tappedAircraftIds = Collections.synchronizedSet(new HashSet<>());
 
     public Aircraft addAircraft(double x, double y) {
         String id = UUID.randomUUID().toString();
-        // Random velocity between -2 and 2
-        double velocityX = (Math.random() - 0.5) * 4;
-        double velocityY = (Math.random() - 0.5) * 4;
+        double speedMultiplier = getSpeedMultiplier();
+        // Random velocity between -2 and 2, scaled by level
+        double velocityX = (Math.random() - 0.5) * 4 * speedMultiplier;
+        double velocityY = (Math.random() - 0.5) * 4 * speedMultiplier;
         
         Aircraft aircraft = new Aircraft(id, x, y, velocityX, velocityY);
         aircrafts.put(id, aircraft);
         return aircraft;
+    }
+
+    public Aircraft addRandomAircraft() {
+        double margin = 50.0;
+        double x = margin + Math.random() * (CANVAS_WIDTH - 2 * margin);
+        double y = margin + Math.random() * (CANVAS_HEIGHT - 2 * margin);
+        return addAircraft(x, y);
     }
 
     public Collection<Aircraft> getAllAircrafts() {
@@ -50,6 +67,17 @@ public class AirTrafficService {
                 if (distance < MIN_SEPARATION) {
                     Conflict conflict = new Conflict(a1, a2, distance);
                     activeConflicts.add(conflict);
+
+                    // Track unique collision pairs for counting
+                    String pairKey = a1.getId().compareTo(a2.getId()) < 0
+                            ? a1.getId() + ":" + a2.getId()
+                            : a2.getId() + ":" + a1.getId();
+                    if (seenConflictPairs.add(pairKey)) {
+                        totalCollisionCount++;
+                        if (totalCollisionCount > 5) {
+                            gameOver = true;
+                        }
+                    }
                 }
             }
         }
@@ -59,6 +87,24 @@ public class AirTrafficService {
 
     public List<Conflict> getActiveConflicts() {
         return new ArrayList<>(activeConflicts);
+    }
+
+    public boolean recordTap(String aircraftId) {
+        if (tappedAircraftIds.contains(aircraftId)) {
+            return false;
+        }
+        boolean inConflict = activeConflicts.stream().anyMatch(c ->
+                !c.isResolved() && (c.getAircraft1().getId().equals(aircraftId)
+                        || c.getAircraft2().getId().equals(aircraftId)));
+        if (inConflict) {
+            tappedAircraftIds.add(aircraftId);
+            tappedCollisionCount++;
+            if (tappedCollisionCount > 0 && tappedCollisionCount % 10 == 0) {
+                level++;
+            }
+            return true;
+        }
+        return false;
     }
 
     public void resolveConflict(Conflict conflict) {
@@ -102,6 +148,52 @@ public class AirTrafficService {
         if (heading >= 45 && heading < 135) return "East";
         if (heading >= -135 && heading < -45) return "West";
         return "South";
+    }
+
+    public double getSpeedMultiplier() {
+        return 1.0 + (level - 1) * 0.3;
+    }
+
+    public int getTargetAircraftCount() {
+        return 2 + level;
+    }
+
+    public int getLevel() {
+        return level;
+    }
+
+    public int getTotalCollisionCount() {
+        return totalCollisionCount;
+    }
+
+    public int getTappedCollisionCount() {
+        return tappedCollisionCount;
+    }
+
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    public Map<String, Object> getGameState() {
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("level", level);
+        state.put("totalCollisions", totalCollisionCount);
+        state.put("tappedCollisions", tappedCollisionCount);
+        state.put("gameOver", gameOver);
+        state.put("targetAircraftCount", getTargetAircraftCount());
+        state.put("speedMultiplier", getSpeedMultiplier());
+        return state;
+    }
+
+    public void resetGame() {
+        aircrafts.clear();
+        activeConflicts.clear();
+        seenConflictPairs.clear();
+        tappedAircraftIds.clear();
+        level = 1;
+        totalCollisionCount = 0;
+        tappedCollisionCount = 0;
+        gameOver = false;
     }
 
     public void removeAircraft(String id) {

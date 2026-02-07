@@ -5,11 +5,17 @@ const conflictList = document.getElementById('conflictList');
 const aircraftCountEl = document.getElementById('aircraftCount');
 const conflictCountEl = document.getElementById('conflictCount');
 const scoreEl = document.getElementById('score');
+const levelEl = document.getElementById('levelDisplay');
 const clearBtn = document.getElementById('clearBtn');
+const gameOverOverlay = document.getElementById('gameOverOverlay');
+const gameOverStats = document.getElementById('gameOverStats');
+const restartBtn = document.getElementById('restartBtn');
 
 let aircrafts = [];
 let conflicts = [];
 let score = 0;
+let currentLevel = 1;
+let isGameOver = false;
 let flaggedAircraftIds = new Set();
 
 const AIRCRAFT_HIT_RADIUS = 22;
@@ -69,19 +75,40 @@ async function addAircraft(x, y) {
 }
 
 // Handle tapping an aircraft to flag a collision
-function handleAircraftTap(aircraft) {
+async function handleAircraftTap(aircraft) {
     if (flaggedAircraftIds.has(aircraft.id)) return;
+    if (isGameOver) return;
 
-    const inConflict = conflicts.some(c =>
-        !c.resolved && (c.aircraft1.id === aircraft.id || c.aircraft2.id === aircraft.id)
-    );
+    try {
+        const response = await fetch(`${API_BASE}/tap/${aircraft.id}`, { method: 'POST' });
+        const data = await response.json();
 
-    if (inConflict) {
-        score += 10;
-        flaggedAircraftIds.add(aircraft.id);
+        if (data.success) {
+            score += 10;
+            flaggedAircraftIds.add(aircraft.id);
+
+            // Check for level up
+            if (data.level > currentLevel) {
+                currentLevel = data.level;
+                levelEl.textContent = `Level: ${currentLevel}`;
+                flashLevel();
+            }
+        } else {
+            score = Math.max(0, score - 5);
+        }
         flashScore();
-    } else {
-        score = Math.max(0, score - 5);
+    } catch (error) {
+        console.error('Error tapping aircraft:', error);
+        // Fallback to local scoring
+        const inConflict = conflicts.some(c =>
+            !c.resolved && (c.aircraft1.id === aircraft.id || c.aircraft2.id === aircraft.id)
+        );
+        if (inConflict) {
+            score += 10;
+            flaggedAircraftIds.add(aircraft.id);
+        } else {
+            score = Math.max(0, score - 5);
+        }
         flashScore();
     }
 
@@ -93,6 +120,52 @@ function flashScore() {
     void scoreEl.offsetWidth; // force reflow to restart CSS animation
     scoreEl.classList.add('flash');
 }
+
+function flashLevel() {
+    levelEl.classList.remove('flash');
+    void levelEl.offsetWidth;
+    levelEl.classList.add('flash');
+}
+
+// Fetch game state from backend
+async function updateGameState() {
+    try {
+        const response = await fetch(`${API_BASE}/gamestate`);
+        const state = await response.json();
+
+        if (state.level !== currentLevel) {
+            currentLevel = state.level;
+            levelEl.textContent = `Level: ${currentLevel}`;
+            flashLevel();
+        }
+
+        if (state.gameOver && !isGameOver) {
+            isGameOver = true;
+            gameOverStats.textContent = `You reached Level ${currentLevel} with a score of ${score}.`;
+            gameOverOverlay.style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Error fetching game state:', error);
+    }
+}
+
+// Restart game
+restartBtn.addEventListener('click', async () => {
+    try {
+        await fetch(`${API_BASE}/reset`, { method: 'POST' });
+        isGameOver = false;
+        score = 0;
+        currentLevel = 1;
+        aircrafts = [];
+        conflicts = [];
+        flaggedAircraftIds.clear();
+        scoreEl.textContent = 'Score: 0';
+        levelEl.textContent = 'Level: 1';
+        gameOverOverlay.style.display = 'none';
+    } catch (error) {
+        console.error('Error resetting game:', error);
+    }
+});
 
 // Clear all aircraft
 clearBtn.addEventListener('click', async () => {
@@ -294,6 +367,7 @@ function drawAircrafts() {
 function update() {
     updateAircrafts();
     updateConflicts();
+    updateGameState();
     drawAircrafts();
 }
 

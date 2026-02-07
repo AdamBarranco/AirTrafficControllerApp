@@ -35,6 +35,26 @@ public class AirTrafficController {
         return airTrafficService.getActiveConflicts();
     }
 
+    @GetMapping("/gamestate")
+    public Map<String, Object> getGameState() {
+        return airTrafficService.getGameState();
+    }
+
+    @PostMapping("/tap/{aircraftId}")
+    public Map<String, Object> tapAircraft(@PathVariable String aircraftId) {
+        boolean success = airTrafficService.recordTap(aircraftId);
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("success", success);
+        result.putAll(airTrafficService.getGameState());
+        return result;
+    }
+
+    @PostMapping("/reset")
+    public Map<String, Object> resetGame() {
+        airTrafficService.resetGame();
+        return airTrafficService.getGameState();
+    }
+
     @PostMapping("/update")
     public void updatePositions() {
         airTrafficService.updatePositions();
@@ -53,6 +73,17 @@ public class AirTrafficController {
     // Auto-update positions every 100ms
     @Scheduled(fixedRate = 100)
     public void scheduledUpdate() {
+        if (airTrafficService.isGameOver()) {
+            return;
+        }
+
+        // Auto-spawn planes to reach target count for current level
+        int target = airTrafficService.getTargetAircraftCount();
+        int current = airTrafficService.getAllAircrafts().size();
+        if (current < target) {
+            airTrafficService.addRandomAircraft();
+        }
+
         airTrafficService.updatePositions();
         
         // Auto-resolve conflicts
